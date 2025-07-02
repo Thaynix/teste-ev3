@@ -1,43 +1,62 @@
 #!/usr/bin/env pybricks-micropython
 from pybricks.hubs import EV3Brick
-from pybricks.ev3devices import (Motor, ColorSensor)
+from pybricks.ev3devices import (Motor, TouchSensor, ColorSensor, InfraredSensor, UltrasonicSensor, GyroSensor)
 from pybricks.parameters import Port, Stop, Direction, Button, Color
 from pybricks.tools import wait, StopWatch, DataLog
 from pybricks.robotics import DriveBase
 from pybricks.media.ev3dev import SoundFile, ImageFile
+from math import pi
 
-# Inicia o EV3
+
+# This program requires LEGO EV3 MicroPython v2.0 or higher.
+# Click "Open user guide" on the EV3 extension tab for more information.
+
+
+# Create your objects here.
 ev3 = EV3Brick()
 
 # Motores
+motorC = Motor(Port.A)
 motorL = Motor(Port.B)
 motorR = Motor(Port.C)
-# motorCentral = Motor(Port.A)
+
 
 # Sensores
 sensorCorR = ColorSensor(Port.S1)
 sensorCorL = ColorSensor(Port.S2)
+# SensorUltrassom = UltrasonicSensor(Port.S3)
 
+# controle dos motor
+ganho = 2.0
+potencia = 100
+potencia_min = 50   
+potencia_max = 200
 
-# Função andar
-def andar():
+# Função seguir linha
+def seguir_linha():
     while True:
-        potenciaL = 50
-        potenciaR = 50
-        motorR.run(potenciaR)
-        motorL.run(potenciaL)
-        wait(1000)  
+        refL = sensorCorL.reflection()
+        refR = sensorCorR.reflection()
 
-# Função para sensor de cor
-def sensorCor():
-    while True:
-        sensorR = sensorCorR.color()
-        sensorL = sensorCorL.color()
-        if sensorL and sensorR == Color.BROWN:
-            andar()
+        if refL is None or refR is None:
+            ev3.speaker.beep()
+            continue
+
+        limit_preto = 30 
+
+        if refL < limit_preto:
+            motorL.run(-potencia_max)
+            motorR.run(potencia_max)
+            motorC.run(potencia_max)
+
+        elif refR < limit_preto:
+            motorL.run(potencia_max)
+            motorR.run(-potencia_max)
+            motorC.run(-potencia_max)
+
         else:
-            andar.stop()
-        wait(1000)
-sensorCor()
+            motorL.run(potencia_max)
+            motorR.run(potencia_max)
+            motorC.stop()
 
-wait(2000)
+seguir_linha()
