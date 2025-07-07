@@ -20,14 +20,21 @@ motorC = Motor(Port.A)
 motorL = Motor(Port.B)
 motorR = Motor(Port.C)
 
-
+# Motores da garra
+motorG = Motor(Port.D)
+motorG2 = Motor(Port.D)
 # Sensores
 sensorCorR = ColorSensor(Port.S1)
 sensorCorL = ColorSensor(Port.S2)
+
+# sensor da garra direita
+sensorUltraR = UltrasonicSensor(Port.S3)
+sensorUltraL = UltrasonicSensor(Port.S4)
 # SensorUltrassom = UltrasonicSensor(Port.S3)
 
 # controle dos motor
 ganho = 2.0
+ref = 20
 potencia = 100
 potencia_min = 50   
 potencia_max = 200
@@ -42,21 +49,55 @@ def seguir_linha():
             ev3.speaker.beep()
             continue
 
-        limit_preto = 30 
+        print("Reflexão Esquerdo: " + str(refL))
+        print("Reflexão Direito:" + str(refR))
 
-        if refL < limit_preto:
+        if refL > 20 and refR > 20:
+            motorL.run(potencia_max)
+            motorR.run(potencia_max)
+            motorC.stop()
+        
+        if refL < 8:
             motorL.run(-potencia_max)
             motorR.run(potencia_max)
             motorC.run(potencia_max)
-
-        elif refR < limit_preto:
+        
+        if refR < 8:
             motorL.run(potencia_max)
             motorR.run(-potencia_max)
             motorC.run(-potencia_max)
 
-        else:
-            motorL.run(potencia_max)
-            motorR.run(potencia_max)
-            motorC.stop()
-
 seguir_linha()
+
+def mover_garra():
+    distR = sensorUltraR.distance() / 10
+    distL = sensorUltraL.distance() / 10
+    mediaDist = distR + distL / 2
+
+    while True:
+        print(sensorUltraR.distance)
+    
+        if mediaDist < 7:
+            motorG.run_target(-potencia, 90)
+        if distR > 7:
+            motorG.run(potencia, -90)
+
+mover_garra()
+
+def abre_fecha_garra():
+    motorG2.reset_angle(0) 
+
+    while True:
+        distR = sensorUltraR.distance() / 10  
+
+        if distR < 6:
+            # Fecha a garra (vai até 0°)
+            motorG2.run_angle(500, 0)
+        
+        elif distR > 7:
+            # Abre a garra (vai até 90°)
+            motorG2.run_angle(500, 90)
+
+        wait(200)
+
+# abre_fecha_garra()
