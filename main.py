@@ -1,105 +1,143 @@
 #!/usr/bin/env pybricks-micropython
-from pybricks.hubs import EV3Brick
-from pybricks.ev3devices import (Motor, TouchSensor, ColorSensor, InfraredSensor, UltrasonicSensor, GyroSensor)
-from pybricks.parameters import Port, Stop, Direction, Button, Color
-from pybricks.tools import wait, StopWatch, DataLog
-from pybricks.robotics import DriveBase
-from pybricks.media.ev3dev import SoundFile, ImageFile
-from math import pi
-from random import randint
+from pybricks.hubs       import EV3Brick
+from pybricks.ev3devices import Motor, ColorSensor
+from pybricks.parameters import Port, Stop
+from pybricks.tools      import wait, StopWatch
+from math                 import pi
 
-EV3 = EV3Brick()
+# --- Inicialização do EV3 ---
+EV3            = EV3Brick()
+motorL         = Motor(Port.B)
+motorR         = Motor(Port.C)
+sensorL        = ColorSensor(Port.S1)
+sensorR        = ColorSensor(Port.S2)
+sensorA        = ColorSensor(Port.S3)
+sensorB        = ColorSensor(Port.S4)
+MOTOR_CENTRAL  = Motor(Port.A)
 
-MOTOR_CENTRAL = Motor(Port.A)
-MOTOR_ESQUERDO = Motor(Port.C)
-MOTOR_DIREITO = Motor(Port.B)
-
-SENSOR_COR_ESQUERDO = ColorSensor(Port.S1)
-SENSOR_COR_DIREITO = ColorSensor(Port.S2)
-
-POTENCIA = 100
-POTENCIA_MIN = 50   
-POTENCIA_MAX = 200
-
+# --- Função de deslocamento ---
 def andar_cm(distancia_cm, velocidade=200):
-    """
-    Versão com compensação de peso (ajuste empírico).
-    peso_kg: Peso aproximado do robô em quilogramas.
-    """
-    diametro_roda = 4.8  # cm
+    diametro_roda = 4.8
     circunferencia = pi * diametro_roda
     rotacoes = distancia_cm / circunferencia
-    
     angulo = rotacoes * 360
-    
-    MOTOR_DIREITO.reset_angle(0)
-    MOTOR_ESQUERDO.reset_angle(0)
 
-    MOTOR_ESQUERDO.run_angle(velocidade, angulo, wait=False)
-    MOTOR_DIREITO.run_angle(velocidade, angulo, wait=True)
-    
-    MOTOR_ESQUERDO.hold()
-    MOTOR_DIREITO.hold()
+    motorL.reset_angle(0)
+    motorR.reset_angle(0)
+    motorL.run_angle(velocidade, angulo, wait=False)
+    motorR.run_angle(velocidade, angulo, wait=True)
+    motorL.hold()
+    motorR.hold()
 
+# --- Sua função de giro ---
 def girar_graus(angulo, velocidade=200):
-    """
-    Gira o robô em torno do seu eixo vertical.
-    angulo: Ângulo em graus para girar (positivo para direita, negativo para esquerda).
-    velocidade: Velocidade de rotação dos motores.
-    """
     MOTOR_CENTRAL.reset_angle(0)
-    MOTOR_DIREITO.reset_angle(0)
-    MOTOR_ESQUERDO.reset_angle(0)
+    motorL.reset_angle(0)
+    motorR.reset_angle(0)
 
-    # Usa o valor absoluto do ângulo para cálculo
-    angulo_abs = abs(angulo) * pi
-    
-    if angulo > 0:  # Direita (horário)
-        print("Girando para a direita")
-        MOTOR_ESQUERDO.run_angle(velocidade, angulo_abs, wait=False)
-        MOTOR_DIREITO.run_angle(velocidade, -angulo_abs, wait=False)
-        MOTOR_CENTRAL.run_angle(velocidade, -angulo_abs, wait=True)
-    else:  # Esquerda (anti-horário)
-        print("Girando para a esquerda")
-        MOTOR_ESQUERDO.run_angle(velocidade, -angulo_abs, wait=False)
-        MOTOR_DIREITO.run_angle(velocidade, angulo_abs, wait=False)
-        MOTOR_CENTRAL.run_angle(velocidade, angulo_abs, wait=True)
-    
-    MOTOR_ESQUERDO.hold()
-    MOTOR_DIREITO.hold()
+    ang_abs = abs(angulo) * pi
+
+    if angulo > 0:
+        motorL.run_angle(velocidade,  ang_abs, wait=False)
+        motorR.run_angle(velocidade, -ang_abs, wait=False)
+        MOTOR_CENTRAL.run_angle(velocidade, ang_abs, wait=True)
+    else:
+        motorL.run_angle(velocidade, -ang_abs, wait=False)
+        motorR.run_angle(velocidade,  ang_abs, wait=False)
+        MOTOR_CENTRAL.run_angle(velocidade,  -ang_abs, wait=True)
+
+    motorL.hold()
+    motorR.hold()
     MOTOR_CENTRAL.hold()
 
-def alinhar():
-    THRESHOLD    = 10
-    ADJUST_SPEED = 100
-    ADJUST_ANGLE = -15  
-    ANGLE        = 15    
+# --- Seguidor de linha com PID ---
+def seguir_linha_pid():
+    Kp, Ki, Kd = 8, 0.5, 0.2
+    base_speed = 150
+    integral = 0
+    last_error = 0
+
     while True:
-        refL = SENSOR_COR_ESQUERDO.reflection()
-        refR = SENSOR_COR_DIREITO.reflection()
+        rL = sensorL.reflection()
+        rR = sensorR.reflection()
+        if rL is None or rR is None:
+            EV3.speaker.beep()
+            wait(200)
+            continue
 
-        # --- Lado Direito ---
-        if refR < THRESHOLD:
-            # Se vê preto: faz um único ajuste e para o motor
-            MOTOR_DIREITO.run_angle(ADJUST_SPEED, ADJUST_ANGLE, then=Stop.HOLD, wait=True)
-            MOTOR_DIREITO.stop()                    # garante parada completa
+        # interrompe ao ver preto em S3 e S4
+        if sensorA.reflection() < 38 and sensorB.reflection() < 15:
+            motorL.stop()
+            motorR.stop()
+            return
+
+        error = rL - rR
+        integral = max(min(integral + error, 1000), -1000)
+        deriv = error - last_error
+        corr = Kp*error + Ki*integral + Kd*deriv
+        last_error = error
+
+        vL = max(min(base_speed - corr, 500), -500)
+        vR = max(min(base_speed + corr, 500), -500)
+        motorL.run(vL)
+        motorR.run(vR)
+
+        wait(20)
+
+# --- Alinhamento de 2 segundos com thresholds separados e debug ---
+def alinhar_linha():
+    # agora você pode ajustar separadamente:
+    THRESHOLD_A = 38   # limite para sensor A (porta S3)
+    THRESHOLD_B = 13  # limite para sensor B (porta S4)
+    SPEED = 100
+    ANGLE_IN  = -15
+    ANGLE_OUT = 15
+
+    sw = StopWatch()
+    sw.reset()
+    print(">> Iniciando alinhamento (2 s)")
+    while sw.time() < 2000:
+        ra = sensorA.reflection()
+        rb = sensorB.reflection()
+
+        # debug no serial:
+        print("  Sensor A:", ra, " vs TH_A:", THRESHOLD_A,
+              " | Sensor B:", rb, " vs TH_B:", THRESHOLD_B)
+
+        if ra is None or rb is None:
+            EV3.speaker.beep()
+            wait(200)
+            continue
+
+        # direito (sensorB)
+        if rb < THRESHOLD_B:
+            motorR.run_angle(SPEED, ANGLE_IN, then=Stop.HOLD, wait=True)
         else:
-            # Se vê claro: faz um único ajuste e para o motor
-            MOTOR_DIREITO.run_angle(ADJUST_SPEED, ANGLE, then=Stop.HOLD, wait=True)
-            MOTOR_DIREITO.stop()
+            motorR.run_angle(SPEED, ANGLE_OUT, then=Stop.HOLD, wait=True)
 
-        # --- Lado Esquerdo ---
-        if refL < THRESHOLD:
-            MOTOR_ESQUERDO.run_angle(ADJUST_SPEED, ADJUST_ANGLE, then=Stop.HOLD, wait=True)
-            MOTOR_ESQUERDO.stop()
+        motorR.stop()
+
+        # esquerdo (sensorA)
+        if ra < THRESHOLD_A:
+            motorL.run_angle(SPEED, ANGLE_IN, then=Stop.HOLD, wait=True)
         else:
-            MOTOR_ESQUERDO.run_angle(ADJUST_SPEED, ANGLE, then=Stop.HOLD, wait=True)
-            MOTOR_ESQUERDO.stop()
+            motorL.run_angle(SPEED, ANGLE_OUT, then=Stop.HOLD, wait=True)
 
-        wait(10)
+        motorL.stop()
 
+        wait(50)
 
-andar_cm(15, velocidade=700)
-girar_graus(90, velocidade=700)
-girar_graus(-180, velocidade=700)
-alinhar()
+    print(">> Alinhamento concluído")
+
+# --- Fluxo principal em loop infinito ---
+def main():
+    while True:
+        seguir_linha_pid()
+        alinhar_linha()
+        andar_cm(5)
+        girar_graus(-90, 700)
+        EV3.speaker.beep()
+        wait(500)
+
+if __name__ == "__main__":
+    main()
